@@ -715,7 +715,7 @@
       }
       tbody.appendChild(makeRow([row.mes, fmt(row.interno), fmt(row.externo)], [null, row.interno, row.externo]));
     });
-    const last15 = (data.faturamento_mensal || []).slice(-15);
+    const last15 = (data.faturamento_mensal || []).slice(-12);
     const l15In = last15.reduce((s, r) => s + (r.interno || 0), 0);
     const l15Ex = last15.reduce((s, r) => s + (r.externo || 0), 0);
     const tfoot = document.getElementById('monthly-tfoot');
@@ -724,7 +724,7 @@
       const y = yearTotals[year];
       if (y) tfoot.appendChild(makeRow([`Total ${year}`, fmt(y.in), fmt(y.ex)], [null, y.in, y.ex]));
     });
-    tfoot.appendChild(makeRow(['Últimos 15 meses', fmt(l15In), fmt(l15Ex)], [null, l15In, l15Ex]));
+    tfoot.appendChild(makeRow(['Últimos 12 meses', fmt(l15In), fmt(l15Ex)], [null, l15In, l15Ex]));
     renderRevenueChart(data.faturamento_mensal);
 
     // Summary table

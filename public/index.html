@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Analisador PGDAS-D — Simples Nacional</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
   <style>
@@ -74,6 +75,7 @@
       margin-bottom: .75rem;
     }
     #password-input:focus { border-color: var(--green-mid); }
+    #password-input::placeholder { color: #ccc; }
 
     #password-error {
       color: #c62828;
@@ -100,13 +102,6 @@
     .btn:active { transform: scale(.98); }
     .btn:disabled { background: #a5bea5; cursor: not-allowed; transform: none; }
     .btn-sm { width: auto; padding: .55rem 1.25rem; font-size: .85rem; }
-
-    /* ── Main ────────────────────────────────── */
-    main {
-      max-width: 920px;
-      margin: 2rem auto;
-      padding: 0 1rem 3rem;
-    }
 
     /* ── Card ────────────────────────────────── */
     .card {
@@ -179,6 +174,21 @@
       font-size: .88rem;
     }
 
+    /* ── Vision badge ────────────────────────── */
+    #vision-badge {
+      display: none;
+      align-items: center;
+      gap: .5rem;
+      background: #e8f4ff;
+      border: 1px solid #90caf9;
+      color: #1565c0;
+      border-radius: 8px;
+      padding: .6rem 1rem;
+      margin-bottom: 1rem;
+      font-size: .83rem;
+    }
+    #vision-badge.visible { display: flex; }
+
     /* ── Results ─────────────────────────────── */
     #results { display: none; }
 
@@ -230,6 +240,66 @@
     tfoot td.copied { background: var(--green-dark) !important; color: var(--white); }
 
     .copy-hint { font-size: .72rem; color: #999; text-align: right; margin-top: .5rem; }
+
+    /* ── Chart ────────────────────────────────── */
+    #revenue-chart-wrap {
+      margin-top: 1.5rem;
+      position: relative;
+      height: 280px;
+    }
+    #revenue-chart-wrap canvas { max-height: 280px; }
+
+    /* ── Layout ──────────────────────────────── */
+    .layout {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+      max-width: 1180px;
+      margin: 2rem auto;
+      padding: 0 1rem 3rem;
+    }
+    .content-area { flex: 1; min-width: 0; }
+
+    /* ── History sidebar ─────────────────────── */
+    .history-panel {
+      width: 260px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 1rem;
+    }
+    .history-list { max-height: 70vh; overflow-y: auto; }
+    .history-entry {
+      padding: .6rem .4rem;
+      border-bottom: 1px solid var(--gray-border);
+      font-size: .8rem;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background .15s;
+    }
+    .history-entry:last-child { border-bottom: none; }
+    .history-entry:hover { background: var(--green-pale); }
+    .history-entry .h-header  { display: flex; justify-content: space-between; align-items: flex-start; }
+    .history-entry .h-date    { color: #aaa; font-size: .72rem; margin-bottom: .2rem; }
+    .history-entry .h-empresa {
+      font-weight: 700; color: #222;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-entry .h-cnpj   { color: #777; margin-top: .1rem; }
+    .history-entry .h-meta   { color: var(--green-dark); font-weight: 600; margin-top: .25rem; }
+    .h-delete {
+      background: none; border: none;
+      color: #ccc; font-size: 1.1rem; line-height: 1;
+      cursor: pointer; padding: 0 .2rem; flex-shrink: 0;
+      transition: color .15s;
+    }
+    .h-delete:hover { color: #c62828; }
+    .history-empty { color: #bbb; font-size: .82rem; text-align: center; padding: 1.5rem 0; }
+
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      .history-panel { width: 100%; position: static; }
+      .history-list  { max-height: 240px; }
+    }
   </style>
 </head>
 <body>
@@ -268,7 +338,10 @@
 </header>
 
 <!-- ── Main ─────────────────────────────────────── -->
-<main>
+<div class="layout">
+
+<!-- ── Content ──────────────────────────────────── -->
+<div class="content-area">
 
   <!-- Upload card -->
   <div id="upload-section" class="card">
@@ -317,6 +390,17 @@
       <button class="btn btn-sm" onclick="resetUI()">+ Nova Análise</button>
     </div>
 
+    <!-- Vision fallback indicator -->
+    <div id="vision-badge">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="16" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12.01" y2="8"/>
+      </svg>
+      Análise refeita via GPT-4o Vision — valores muito baixos detectados na leitura de texto.
+    </div>
+
     <!-- Contributor info -->
     <div class="card">
       <div class="card-title">
@@ -351,8 +435,8 @@
           <thead>
             <tr>
               <th>Mês</th>
-              <th>Mercado Interno (R$)</th>
-              <th>Mercado Externo (R$)</th>
+              <th>Mercado Interno</th>
+              <th>Mercado Externo</th>
             </tr>
           </thead>
           <tbody id="monthly-tbody"></tbody>
@@ -363,6 +447,9 @@
         <p class="copy-hint" style="margin:0">Clique em qualquer célula para copiar o valor</p>
         <button class="btn btn-sm" onclick="copyMonthlyCSV()" id="csv-btn"
                 style="font-size:.75rem;padding:.35rem .85rem">Copiar CSV</button>
+      </div>
+      <div id="revenue-chart-wrap">
+        <canvas id="revenue-chart"></canvas>
       </div>
     </div>
 
@@ -382,8 +469,8 @@
           <thead>
             <tr>
               <th>Indicador</th>
-              <th>Mercado Interno (R$)</th>
-              <th>Mercado Externo (R$)</th>
+              <th>Mercado Interno</th>
+              <th>Mercado Externo</th>
             </tr>
           </thead>
           <tbody id="summary-tbody"></tbody>
@@ -408,7 +495,7 @@
           <thead>
             <tr>
               <th>Tributo</th>
-              <th>Valor (R$)</th>
+              <th>Valor</th>
               <th>Ente Federativo</th>
             </tr>
           </thead>
@@ -420,11 +507,40 @@
     </div>
   </div>
 
-</main>
+</div><!-- /.content-area -->
+
+<!-- ── History sidebar ──────────────────────────── -->
+<aside id="history-panel" class="history-panel" style="display:none">
+  <div class="card">
+    <div class="card-title" style="justify-content:space-between">
+      <span style="display:flex;align-items:center;gap:.5rem">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        Últimas Consultas
+      </span>
+      <button id="clear-all-btn" onclick="clearAllHistory()"
+              title="Apagar todo o histórico"
+              style="background:none;border:none;color:#ccc;font-size:.75rem;cursor:pointer;padding:0;transition:color .15s"
+              onmouseover="this.style.color='#c62828'" onmouseout="this.style.color='#ccc'">
+        Limpar tudo
+      </button>
+    </div>
+    <div id="history-list" class="history-list">
+      <p class="history-empty">Nenhuma consulta ainda.</p>
+    </div>
+  </div>
+</aside>
+
+</div><!-- /.layout -->
 
 <script>
-  let selectedFile  = null;
+  let selectedFile   = null;
   let accessPassword = '';
+  let historyMap     = {};
+  let revenueChart   = null;
 
   // ── Password ──────────────────────────────────────────────
   document.getElementById('password-input').addEventListener('keydown', e => {
@@ -434,16 +550,37 @@
     if (e.target.value.length === 4) validatePassword();
   });
 
-  function validatePassword() {
-    const val = document.getElementById('password-input').value.trim();
+  async function validatePassword() {
+    const input = document.getElementById('password-input');
+    const val = input.value.trim();
     const errEl = document.getElementById('password-error');
     if (val.length !== 4) {
       errEl.textContent = 'A senha deve ter exatamente 4 dígitos.';
+      input.style.borderColor = '#c62828';
       return;
     }
-    accessPassword = val;
-    errEl.textContent = '';
-    document.getElementById('modal-overlay').style.display = 'none';
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: val })
+      });
+      if (res.ok) {
+        accessPassword = val;
+        errEl.textContent = '';
+        input.style.borderColor = '';
+        document.getElementById('modal-overlay').style.display = 'none';
+        fetchHistory();
+      } else {
+        errEl.textContent = 'Senha incorreta. Tente novamente.';
+        input.style.borderColor = '#c62828';
+        input.value = '';
+        input.focus();
+      }
+    } catch {
+      errEl.textContent = 'Erro de conexão. Tente novamente.';
+      input.style.borderColor = '#c62828';
+    }
   }
 
   // ── File handling ─────────────────────────────────────────
@@ -493,10 +630,12 @@
       if (!res.ok) {
         setLoading(false);
         if (res.status === 401) {
-          // Wrong password — show modal again
+          const pwInput = document.getElementById('password-input');
           document.getElementById('modal-overlay').style.display = 'flex';
           document.getElementById('password-error').textContent = 'Senha incorreta. Tente novamente.';
-          document.getElementById('password-input').value = '';
+          pwInput.style.borderColor = '#c62828';
+          pwInput.value = '';
+          pwInput.focus();
         } else {
           showError(data.error || 'Erro desconhecido ao processar.');
         }
@@ -504,6 +643,7 @@
       }
 
       renderResults(data);
+      fetchHistory();
       setLoading(false);
       document.getElementById('results').style.display = 'block';
       document.getElementById('upload-section').style.display = 'none';
@@ -520,6 +660,9 @@
     document.getElementById('r-cnpj').textContent    = data.cnpj    || '—';
     document.getElementById('r-periodo').textContent = data.periodo_apuracao || '—';
 
+    // Vision badge
+    document.getElementById('vision-badge').classList.toggle('visible', !!data.vision_used);
+
     // Monthly table
     const tbody = document.getElementById('monthly-tbody');
     tbody.innerHTML = '';
@@ -532,6 +675,7 @@
     const tfoot = document.getElementById('monthly-tfoot');
     tfoot.innerHTML = '';
     tfoot.appendChild(makeRow(['Total acumulado', fmt(totIn), fmt(totEx)], [null, totIn, totEx]));
+    renderRevenueChart(data.faturamento_mensal);
 
     // Summary table
     const r = data.resumo || {};
@@ -569,6 +713,62 @@
     ttfoot.appendChild(makeRow(['Total DAS', fmt(t.total), '—'], [null, t.total, null]));
   }
 
+  // ── Revenue chart ─────────────────────────────────────────
+  function renderRevenueChart(faturamento) {
+    if (revenueChart) { revenueChart.destroy(); revenueChart = null; }
+    if (!faturamento || faturamento.length === 0) return;
+
+    const hasExterno = faturamento.some(r => (r.externo || 0) > 0);
+    const labels     = faturamento.map(r => r.mes);
+    const interno    = faturamento.map(r => r.interno || 0);
+    const externo    = faturamento.map(r => r.externo || 0);
+
+    const datasets = [{
+      label: 'Mercado Interno',
+      data: interno,
+      backgroundColor: 'rgba(46,125,50,.75)',
+      borderColor: '#1a5c32',
+      borderWidth: 1,
+      borderRadius: 4
+    }];
+    if (hasExterno) datasets.push({
+      label: 'Mercado Externo',
+      data: externo,
+      backgroundColor: 'rgba(76,175,80,.55)',
+      borderColor: '#2e7d32',
+      borderWidth: 1,
+      borderRadius: 4
+    });
+
+    const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    revenueChart = new Chart(document.getElementById('revenue-chart').getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Evolução do Faturamento',
+            color: '#1a5c32',
+            font: { size: 13, weight: '700' },
+            padding: { bottom: 10 }
+          },
+          legend: { display: hasExterno },
+          tooltip: { callbacks: { label: c => ' ' + fmtBRL(c.parsed.y) } }
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+          y: {
+            ticks: { callback: v => fmtBRL(v), font: { size: 10 } },
+            grid: { color: 'rgba(0,0,0,.06)' }
+          }
+        }
+      }
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────
   function makeRow(cells, rawValues) {
     const tr = document.createElement('tr');
@@ -582,29 +782,41 @@
     return tr;
   }
 
+  function parseVal(v) {
+    if (v == null) return 0;
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    const s = String(v).trim();
+    // Converte "1.234,56" → 1234.56  |  "1234,56" → 1234.56
+    if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    return parseFloat(s) || 0;
+  }
+
   function fmt(val) {
-    if (val == null || isNaN(val)) return '0,00';
-    return Number(val).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2, maximumFractionDigits: 2
-    });
+    const n = parseVal(val);
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function fmtCopy(raw) {
+    return parseVal(raw).toFixed(2).replace('.', ',');
   }
 
   function copyCell(el) {
     if (el.dataset.copying) return;
-    const orig = el.dataset.raw != null ? el.dataset.raw : el.textContent.trim();
+    const display  = el.textContent.trim();
+    const copyVal  = el.dataset.raw != null ? fmtCopy(el.dataset.raw) : display;
     const show = () => {
       el.dataset.copying = '1';
       el.classList.add('copied');
       el.textContent = '✓ Copiado';
       setTimeout(() => {
         el.classList.remove('copied');
-        el.textContent = orig;
+        el.textContent = display;
         delete el.dataset.copying;
       }, 1000);
     };
-    navigator.clipboard.writeText(orig).then(show).catch(() => {
+    navigator.clipboard.writeText(copyVal).then(show).catch(() => {
       const ta = document.createElement('textarea');
-      ta.value = orig;
+      ta.value = copyVal;
       ta.style.cssText = 'position:fixed;opacity:0';
       document.body.appendChild(ta);
       ta.select();
@@ -633,10 +845,77 @@
     document.getElementById('error-banner').style.display = 'none';
   }
 
+  async function fetchHistory() {
+    try {
+      const res = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: accessPassword })
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      renderHistory(data);
+      document.getElementById('history-panel').style.display = 'block';
+    } catch { /* silencioso */ }
+  }
+
+  function renderHistory(entries) {
+    historyMap = {};
+    const list = document.getElementById('history-list');
+    if (!entries || entries.length === 0) {
+      list.innerHTML = '<p class="history-empty">Nenhuma consulta ainda.</p>';
+      return;
+    }
+    list.innerHTML = [...entries].reverse().map(e => {
+      historyMap[e.id] = e;
+      const date = new Date(e.ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      const das  = e.total_das != null ? fmt(e.total_das) : '—';
+      return `<div class="history-entry" onclick="loadFromHistory('${e.id}')">
+        <div class="h-header">
+          <div class="h-date">${date}</div>
+          <button class="h-delete" onclick="deleteHistoryEntry(event,'${e.id}')" title="Apagar">×</button>
+        </div>
+        <div class="h-empresa" title="${e.empresa || '—'}">${e.empresa || '—'}</div>
+        <div class="h-cnpj">${e.cnpj || '—'}</div>
+        <div class="h-meta">PA: ${e.periodo || '—'} &middot; DAS: ${das}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function loadFromHistory(id) {
+    const entry = historyMap[id];
+    if (!entry || !entry.data) return;
+    renderResults(entry.data);
+    document.getElementById('loading').style.display        = 'none';
+    document.getElementById('upload-section').style.display = 'none';
+    document.getElementById('results').style.display        = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function clearAllHistory() {
+    if (!confirm('Apagar todo o histórico de consultas?')) return;
+    await fetch('/api/history/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: accessPassword })
+    });
+    fetchHistory();
+  }
+
+  async function deleteHistoryEntry(event, id) {
+    event.stopPropagation();
+    await fetch('/api/history/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: accessPassword, id })
+    });
+    fetchHistory();
+  }
+
   function copyMonthlyCSV() {
     const rows = [['Mês', 'Mercado Interno', 'Mercado Externo']];
     document.querySelectorAll('#monthly-tbody tr, #monthly-tfoot tr').forEach(tr => {
-      rows.push([...tr.querySelectorAll('td')].map(td => td.dataset.raw ?? td.textContent.trim()));
+      rows.push([...tr.querySelectorAll('td')].map(td => td.dataset.raw != null ? fmtCopy(td.dataset.raw) : td.textContent.trim()));
     });
     const csv = rows.map(r => r.join('\t')).join('\n');
     navigator.clipboard.writeText(csv).then(() => {

@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Analisador PGDAS-D — Simples Nacional</title>
+  <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
   <style>
     :root {
       --green-dark:  #1a5c32;
@@ -357,7 +359,11 @@
           <tfoot id="monthly-tfoot"></tfoot>
         </table>
       </div>
-      <p class="copy-hint">Clique em qualquer célula para copiar o valor</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
+        <p class="copy-hint" style="margin:0">Clique em qualquer célula para copiar o valor</p>
+        <button class="btn btn-sm" onclick="copyMonthlyCSV()" id="csv-btn"
+                style="font-size:.75rem;padding:.35rem .85rem">Copiar CSV</button>
+      </div>
     </div>
 
     <!-- Summary -->
@@ -424,6 +430,9 @@
   document.getElementById('password-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') validatePassword();
   });
+  document.getElementById('password-input').addEventListener('input', e => {
+    if (e.target.value.length === 4) validatePassword();
+  });
 
   function validatePassword() {
     const val = document.getElementById('password-input').value.trim();
@@ -460,7 +469,10 @@
   }
   function setFile(file) {
     selectedFile = file;
-    document.getElementById('selected-name').textContent = '📄 ' + file.name;
+    const size = file.size >= 1024 * 1024
+      ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+      : (file.size / 1024).toFixed(0) + ' KB';
+    document.getElementById('selected-name').textContent = '📄 ' + file.name + ' — ' + size;
     document.getElementById('analyze-btn').disabled = false;
     hideError();
   }
@@ -515,11 +527,11 @@
     (data.faturamento_mensal || []).forEach(row => {
       totIn += row.interno || 0;
       totEx += row.externo || 0;
-      tbody.appendChild(makeRow([row.mes, fmt(row.interno), fmt(row.externo)]));
+      tbody.appendChild(makeRow([row.mes, fmt(row.interno), fmt(row.externo)], [null, row.interno, row.externo]));
     });
     const tfoot = document.getElementById('monthly-tfoot');
     tfoot.innerHTML = '';
-    tfoot.appendChild(makeRow(['Total acumulado', fmt(totIn), fmt(totEx)], true));
+    tfoot.appendChild(makeRow(['Total acumulado', fmt(totIn), fmt(totEx)], [null, totIn, totEx]));
 
     // Summary table
     const r = data.resumo || {};
@@ -532,7 +544,7 @@
     const stbody = document.getElementById('summary-tbody');
     stbody.innerHTML = '';
     summaryRows.forEach(([label, int, ext]) => {
-      stbody.appendChild(makeRow([label, fmt(int), fmt(ext)]));
+      stbody.appendChild(makeRow([label, fmt(int), fmt(ext)], [null, int, ext]));
     });
 
     // Taxes table
@@ -550,20 +562,20 @@
     const ttbody = document.getElementById('tributos-tbody');
     ttbody.innerHTML = '';
     taxRows.forEach(([name, val, dest]) => {
-      ttbody.appendChild(makeRow([name, fmt(val), dest]));
+      ttbody.appendChild(makeRow([name, fmt(val), dest], [null, val, null]));
     });
     const ttfoot = document.getElementById('tributos-tfoot');
     ttfoot.innerHTML = '';
-    ttfoot.appendChild(makeRow(['Total DAS', fmt(t.total), '—'], true));
+    ttfoot.appendChild(makeRow(['Total DAS', fmt(t.total), '—'], [null, t.total, null]));
   }
 
   // ── Helpers ───────────────────────────────────────────────
-  function makeRow(cells, isFoot = false) {
-    const tag = isFoot ? 'td' : 'td';
-    const tr  = document.createElement('tr');
-    cells.forEach(text => {
-      const td = document.createElement(tag);
+  function makeRow(cells, rawValues) {
+    const tr = document.createElement('tr');
+    cells.forEach((text, i) => {
+      const td = document.createElement('td');
       td.textContent = text ?? '—';
+      if (rawValues && rawValues[i] != null) td.dataset.raw = rawValues[i];
       td.onclick = () => copyCell(td);
       tr.appendChild(td);
     });
@@ -579,7 +591,7 @@
 
   function copyCell(el) {
     if (el.dataset.copying) return;
-    const orig = el.textContent.trim();
+    const orig = el.dataset.raw != null ? el.dataset.raw : el.textContent.trim();
     const show = () => {
       el.dataset.copying = '1';
       el.classList.add('copied');
@@ -619,6 +631,20 @@
   }
   function hideError() {
     document.getElementById('error-banner').style.display = 'none';
+  }
+
+  function copyMonthlyCSV() {
+    const rows = [['Mês', 'Mercado Interno', 'Mercado Externo']];
+    document.querySelectorAll('#monthly-tbody tr, #monthly-tfoot tr').forEach(tr => {
+      rows.push([...tr.querySelectorAll('td')].map(td => td.dataset.raw ?? td.textContent.trim()));
+    });
+    const csv = rows.map(r => r.join('\t')).join('\n');
+    navigator.clipboard.writeText(csv).then(() => {
+      const btn = document.getElementById('csv-btn');
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copiado!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    });
   }
 
   function resetUI() {

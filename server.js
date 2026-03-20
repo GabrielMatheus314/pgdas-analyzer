@@ -1,6 +1,8 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const pdf = require('pdf-parse');
 const OpenAI = require('openai');
 const path = require('path');
@@ -17,10 +19,19 @@ const upload = multer({
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const analyzeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Aguarde um momento antes de tentar novamente.' }
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use((req, _res, next) => { req.reqId = crypto.randomBytes(4).toString('hex'); next(); });
 
-app.post('/api/analyze', upload.single('pdf'), async (req, res) => {
+app.post('/api/analyze', analyzeLimiter, upload.single('pdf'), async (req, res) => {
   try {
     const { password } = req.body;
 
@@ -114,10 +125,11 @@ ${pdfText}`;
       }
     }
 
+    console.log(JSON.stringify({ reqId: req.reqId, ts: new Date().toISOString(), status: 'ok' }));
     res.json(data);
 
   } catch (err) {
-    console.error('[ERROR]', err.message);
+    console.error(JSON.stringify({ reqId: req.reqId, ts: new Date().toISOString(), path: req.path, error: err.message, code: err.code }));
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({ error: 'Arquivo muito grande. Máximo: 20 MB.' });
     }

@@ -40,10 +40,10 @@ const upload = multer({
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// 1 upload por IP a cada 10 segundos
+// até 2 uploads por IP a cada 10 segundos (para suportar análise de 2 PDFs simultâneos)
 const analyzeLimiter = rateLimit({
   windowMs: 10 * 1000,
-  max: 1,
+  max: 2,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Aguarde 10 segundos antes de enviar outro arquivo.' }

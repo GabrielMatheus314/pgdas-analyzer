@@ -367,12 +367,12 @@
         <polyline points="17 8 12 3 7 8"/>
         <line x1="12" y1="3" x2="12" y2="15"/>
       </svg>
-      <p><strong>Clique</strong> ou <strong>arraste</strong> o PDF do Extrato PGDAS-D aqui</p>
-      <p class="hint">Somente arquivos .pdf — nenhum dado é armazenado no servidor</p>
+      <p><strong>Clique</strong> ou <strong>arraste</strong> até 2 PDFs do Extrato PGDAS-D aqui</p>
+      <p class="hint">Somente arquivos .pdf (até 2) — nenhum dado é armazenado no servidor</p>
       <div id="selected-name" class="selected-name"></div>
     </div>
 
-    <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="fileSelected(this)">
+    <input type="file" id="file-input" accept=".pdf" multiple style="display:none" onchange="fileSelected(this)">
     <button class="btn" id="analyze-btn" onclick="analyzeFile()" disabled>Analisar com IA</button>
     <div id="error-banner" class="error-banner"></div>
   </div>
@@ -537,7 +537,7 @@
 </div><!-- /.layout -->
 
 <script>
-  let selectedFile   = null;
+  let selectedFiles  = [];
   let accessPassword = '';
   let historyMap     = {};
   let revenueChart   = null;
@@ -585,7 +585,9 @@
 
   // ── File handling ─────────────────────────────────────────
   function fileSelected(input) {
-    if (input.files[0]) setFile(input.files[0]);
+    const files = Array.from(input.files).filter(f => f.type === 'application/pdf').slice(0, 2);
+    if (files.length) setFiles(files);
+    else showError('Por favor, envie apenas arquivos PDF.');
   }
   function handleDragOver(e) {
     e.preventDefault();
@@ -597,38 +599,38 @@
   function handleDrop(e) {
     e.preventDefault();
     document.getElementById('drop-area').classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file && file.type === 'application/pdf') {
-      setFile(file);
-    } else {
-      showError('Por favor, envie apenas arquivos PDF.');
-    }
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf').slice(0, 2);
+    if (files.length) setFiles(files);
+    else showError('Por favor, envie apenas arquivos PDF.');
   }
-  function setFile(file) {
-    selectedFile = file;
-    const size = file.size >= 1024 * 1024
+  function fileSize(file) {
+    return file.size >= 1024 * 1024
       ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
       : (file.size / 1024).toFixed(0) + ' KB';
-    document.getElementById('selected-name').textContent = '📄 ' + file.name + ' — ' + size;
+  }
+  function setFiles(files) {
+    selectedFiles = files;
+    const names = files.map(f => '📄 ' + f.name + ' — ' + fileSize(f)).join('\n');
+    document.getElementById('selected-name').textContent = names;
     document.getElementById('analyze-btn').disabled = false;
     hideError();
   }
 
   // ── Analyze ───────────────────────────────────────────────
   async function analyzeFile() {
-    if (!selectedFile) return;
+    if (!selectedFiles.length) return;
     setLoading(true);
+    const loadingMsg = document.querySelector('#loading p');
+    if (selectedFiles.length === 2) loadingMsg.textContent = 'Analisando 2 extratos com IA…';
+    else loadingMsg.textContent = 'Analisando extrato com IA…';
 
-    const formData = new FormData();
-    formData.append('pdf', selectedFile);
-    formData.append('password', accessPassword);
-
-    try {
+    async function analyzeSingle(file) {
+      const formData = new FormData();
+      formData.append('pdf', file);
+      formData.append('password', accessPassword);
       const res = await fetch('/api/analyze', { method: 'POST', body: formData });
       const data = await res.json();
-
       if (!res.ok) {
-        setLoading(false);
         if (res.status === 401) {
           const pwInput = document.getElementById('password-input');
           document.getElementById('modal-overlay').style.display = 'flex';
@@ -636,10 +638,44 @@
           pwInput.style.borderColor = '#c62828';
           pwInput.value = '';
           pwInput.focus();
-        } else {
-          showError(data.error || 'Erro desconhecido ao processar.');
+          throw new Error('auth');
         }
-        return;
+        throw new Error(data.error || 'Erro desconhecido ao processar.');
+      }
+      return data;
+    }
+
+    function periodToNum(p) {
+      const [m, y] = (p || '00/0000').split('/');
+      return parseInt(y) * 100 + parseInt(m);
+    }
+
+    function mergeResults(r1, r2) {
+      const [newer, older] = periodToNum(r1.periodo_apuracao) >= periodToNum(r2.periodo_apuracao)
+        ? [r1, r2] : [r2, r1];
+      const monthMap = {};
+      [...(older.faturamento_mensal || []), ...(newer.faturamento_mensal || [])].forEach(m => {
+        monthMap[m.mes] = m;
+      });
+      const merged = Object.values(monthMap).sort((a, b) => periodToNum(a.mes) - periodToNum(b.mes));
+      return {
+        empresa: newer.empresa,
+        cnpj: newer.cnpj,
+        periodo_apuracao: older.periodo_apuracao + ' e ' + newer.periodo_apuracao,
+        faturamento_mensal: merged,
+        resumo: newer.resumo,
+        tributos: newer.tributos,
+        vision_used: r1.vision_used || r2.vision_used
+      };
+    }
+
+    try {
+      let data;
+      if (selectedFiles.length === 2) {
+        const [r1, r2] = await Promise.all([analyzeSingle(selectedFiles[0]), analyzeSingle(selectedFiles[1])]);
+        data = mergeResults(r1, r2);
+      } else {
+        data = await analyzeSingle(selectedFiles[0]);
       }
 
       renderResults(data);
@@ -650,7 +686,7 @@
 
     } catch (err) {
       setLoading(false);
-      showError('Falha de conexão. Verifique sua internet e tente novamente.');
+      if (err.message !== 'auth') showError(err.message || 'Falha de conexão. Verifique sua internet e tente novamente.');
     }
   }
 
@@ -667,14 +703,28 @@
     const tbody = document.getElementById('monthly-tbody');
     tbody.innerHTML = '';
     let totIn = 0, totEx = 0;
+    const yearTotals = {};
     (data.faturamento_mensal || []).forEach(row => {
       totIn += row.interno || 0;
       totEx += row.externo || 0;
+      const year = (row.mes || '').split('/')[1];
+      if (year) {
+        if (!yearTotals[year]) yearTotals[year] = { in: 0, ex: 0 };
+        yearTotals[year].in += row.interno || 0;
+        yearTotals[year].ex += row.externo || 0;
+      }
       tbody.appendChild(makeRow([row.mes, fmt(row.interno), fmt(row.externo)], [null, row.interno, row.externo]));
     });
+    const last15 = (data.faturamento_mensal || []).slice(-15);
+    const l15In = last15.reduce((s, r) => s + (r.interno || 0), 0);
+    const l15Ex = last15.reduce((s, r) => s + (r.externo || 0), 0);
     const tfoot = document.getElementById('monthly-tfoot');
     tfoot.innerHTML = '';
-    tfoot.appendChild(makeRow(['Total acumulado', fmt(totIn), fmt(totEx)], [null, totIn, totEx]));
+    ['2024', '2025'].forEach(year => {
+      const y = yearTotals[year];
+      if (y) tfoot.appendChild(makeRow([`Total ${year}`, fmt(y.in), fmt(y.ex)], [null, y.in, y.ex]));
+    });
+    tfoot.appendChild(makeRow(['Últimos 15 meses', fmt(l15In), fmt(l15Ex)], [null, l15In, l15Ex]));
     renderRevenueChart(data.faturamento_mensal);
 
     // Summary table
@@ -927,7 +977,7 @@
   }
 
   function resetUI() {
-    selectedFile = null;
+    selectedFiles = [];
     document.getElementById('results').style.display        = 'none';
     document.getElementById('upload-section').style.display = 'block';
     document.getElementById('selected-name').textContent    = '';

@@ -486,6 +486,70 @@ ${safePdfText}`;
   }
 });
 
+app.get('/api/fipe/saldo', async (req, res) => {
+  const password = req.headers['x-password'];
+  if (!password || password !== process.env.ACCESS_PASSWORD) {
+    return res.status(401).json({ error: 'Senha incorreta' });
+  }
+  try {
+    const apiRes = await fetch('https://gateway.apibrasil.io/api/v2/balance', {
+      headers: { 'Authorization': `Bearer ${process.env.APIBRASIL_TOKEN}` }
+    });
+    const data = await apiRes.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar saldo.' });
+  }
+});
+
+// até 10 consultas FIPE por IP a cada 60 segundos
+const fipeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas consultas. Aguarde 1 minuto.' }
+});
+
+app.post('/api/fipe', fipeLimiter, async (req, res) => {
+  const { password, placa } = req.body;
+
+  if (!password || password !== process.env.ACCESS_PASSWORD) {
+    return res.status(401).json({ error: 'Senha incorreta' });
+  }
+
+  if (!placa || typeof placa !== 'string') {
+    return res.status(400).json({ error: 'Informe a placa do veículo.' });
+  }
+
+  const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (cleanPlaca.length < 6 || cleanPlaca.length > 8) {
+    return res.status(400).json({ error: 'Placa inválida. Use o formato ABC1234 ou ABC1D23.' });
+  }
+
+  try {
+    const apiRes = await fetch('https://gateway.apibrasil.io/api/v2/consulta/veiculos/credits', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.APIBRASIL_TOKEN}`
+      },
+      body: JSON.stringify({ tipo: 'fipe', placa: cleanPlaca, homolog: false })
+    });
+
+    const apiData = await apiRes.json();
+
+    if (apiData.error) {
+      return res.status(502).json({ error: apiData.message || 'Erro na consulta FIPE.' });
+    }
+
+    res.json(apiData);
+  } catch (err) {
+    console.error('[FIPE]', err.message);
+    res.status(500).json({ error: 'Erro ao consultar FIPE. Tente novamente.' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✓ Servidor rodando em http://localhost:${PORT}`);

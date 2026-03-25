@@ -16,6 +16,7 @@
     "multer": "^2.1.1",
     "openai": "^4.67.0",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^2.16.105"
+    "pdfjs-dist": "^2.16.105",
+    "sinesp-api": "^3.0.0"
   }
 }

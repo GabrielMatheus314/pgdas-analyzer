@@ -1133,17 +1133,31 @@
     badge.textContent = 'Saldo: ' + formatted;
   }
 
-  function initiateFipe() {
+  async function initiateFipe() {
     const placa = document.getElementById('fipe-plate-input').value.trim();
     if (!placa) { showFipeError('Digite a placa do veículo.'); return; }
     hideFipeError();
     document.getElementById('fipe-results').style.display = 'none';
-
-    const saldo = document.getElementById('fipe-saldo-badge').textContent.replace('Saldo: ', '') || '—';
-    document.getElementById('fipe-confirm-placa').textContent = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    document.getElementById('fipe-confirm-saldo').textContent = saldo;
-    document.getElementById('fipe-confirm').style.display = 'block';
     document.getElementById('fipe-btn').disabled = true;
+
+    // Sempre busca saldo fresco antes de mostrar confirmação
+    let saldoTexto = '—';
+    try {
+      const res = await fetch('/api/fipe/saldo', { headers: { 'X-Password': accessPassword } });
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.error && data.balance != null) {
+          const value = parseFloat(String(data.balance).replace(',', '.'));
+          saldoTexto = isNaN(value) ? data.balance
+            : value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          updateSaldoBadge(data.balance);
+        }
+      }
+    } catch { /* silencioso */ }
+
+    document.getElementById('fipe-confirm-placa').textContent = placa.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    document.getElementById('fipe-confirm-saldo').textContent = saldoTexto;
+    document.getElementById('fipe-confirm').style.display = 'block';
   }
 
   function cancelFipe() {

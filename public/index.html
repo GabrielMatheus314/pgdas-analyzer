@@ -1125,7 +1125,12 @@
 
   function updateSaldoBadge(balance) {
     const badge = document.getElementById('fipe-saldo-badge');
-    if (badge && balance) badge.textContent = 'Saldo: R$ ' + balance;
+    if (!badge || !balance) return;
+    // API pode retornar "14.640" (ponto decimal) ou "14,640" (vírgula decimal)
+    const value = parseFloat(String(balance).replace(',', '.'));
+    const formatted = isNaN(value) ? balance
+      : value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    badge.textContent = 'Saldo: ' + formatted;
   }
 
   function initiateFipe() {

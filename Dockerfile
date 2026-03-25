@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++ cairo-dev pango-dev jpeg-dev giflib-dev librsvg-dev pixman-dev
 
 COPY package*.json ./
-RUN npm install --production
+RUN npm_config_nodedir=/usr/local npm install --production
 COPY . .
 EXPOSE 3000
 CMD ["node", "server.js"]

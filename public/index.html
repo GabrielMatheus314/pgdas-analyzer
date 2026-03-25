@@ -297,7 +297,31 @@
     .history-empty { color: #bbb; font-size: .82rem; text-align: center; padding: 1.5rem 0; }
 
     /* ── FIPE ────────────────────────────────── */
-    #fipe-section { display: none; }
+    #fipe-section  { display: none; }
+    #split-section { display: none; }
+
+    #split-drop-area {
+      border: 2px dashed var(--green-mid);
+      border-radius: 10px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+      margin-bottom: 1rem;
+    }
+    #split-drop-area:hover, #split-drop-area.drag-over {
+      background: var(--green-pale);
+      border-color: var(--green-dark);
+    }
+    #split-drop-area p     { color: #555; font-size: .9rem; margin-top: .5rem; }
+    #split-drop-area .hint { font-size: .78rem; color: #888; margin-top: .25rem; }
+    #split-selected-name   { margin-top: .75rem; font-size: .85rem; font-weight: 600; color: var(--green-dark); }
+
+    #split-loading {
+      display: none;
+      text-align: center;
+      padding: 2rem 0;
+    }
 
     .fipe-plate-row {
       display: flex;
@@ -442,7 +466,11 @@
     </div>
 
     <input type="file" id="file-input" accept=".pdf" multiple style="display:none" onchange="fileSelected(this)">
-    <button class="btn" id="analyze-btn" onclick="analyzeFile()" disabled>Analisar com IA</button>
+    <div style="display:flex;gap:.6rem">
+      <button class="btn" id="analyze-btn" onclick="analyzeFile()" disabled>Analisar com IA</button>
+      <button class="btn btn-sm" id="clear-btn" onclick="clearFiles()"
+              style="display:none;background:#888;flex-shrink:0;width:auto">Remover arquivo</button>
+    </div>
     <div id="error-banner" class="error-banner"></div>
   </div>
 
@@ -507,6 +535,51 @@
       <div id="fipe-chart-wrap">
         <canvas id="fipe-chart"></canvas>
       </div>
+    </div>
+  </div>
+
+  <!-- PDF Splitter -->
+  <div id="split-section" class="card">
+    <div class="card-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="12" x2="12" y2="18"/>
+        <line x1="9"  y1="15" x2="15" y2="15"/>
+      </svg>
+      Fragmentador de PDF
+    </div>
+
+    <div id="split-drop-area"
+         onclick="document.getElementById('split-file-input').click()"
+         ondragover="splitHandleDragOver(event)"
+         ondragleave="splitHandleDragLeave(event)"
+         ondrop="splitHandleDrop(event)">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2e7d32"
+           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+           style="margin:0 auto;display:block">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="12" x2="12" y2="18"/>
+        <line x1="9"  y1="15" x2="15" y2="15"/>
+      </svg>
+      <p><strong>Clique</strong> ou <strong>arraste</strong> um PDF aqui</p>
+      <p class="hint">Máximo 50 páginas · 20 MB · gera um .zip com um PDF por página</p>
+      <div id="split-selected-name"></div>
+    </div>
+
+    <input type="file" id="split-file-input" accept=".pdf" style="display:none" onchange="splitFileSelected(this)">
+    <div style="display:flex;gap:.6rem">
+      <button class="btn" id="split-btn" onclick="splitPdf()" disabled>Fragmentar PDF</button>
+      <button class="btn btn-sm" id="split-clear-btn" onclick="clearSplitFile()"
+              style="display:none;background:#888;flex-shrink:0;width:auto">Remover arquivo</button>
+    </div>
+    <div id="split-error" class="error-banner"></div>
+
+    <div id="split-loading">
+      <div class="spinner"></div>
+      <p style="color:var(--green-dark);font-weight:600">Fragmentando PDF…</p>
     </div>
   </div>
 
@@ -705,6 +778,7 @@
         input.style.borderColor = '';
         document.getElementById('modal-overlay').style.display = 'none';
         document.getElementById('fipe-section').style.display = 'block';
+        document.getElementById('split-section').style.display = 'block';
         loadFipeSaldo();
         fetchHistory();
       } else {
@@ -749,6 +823,15 @@
     const names = files.map(f => '📄 ' + f.name + ' — ' + fileSize(f)).join('\n');
     document.getElementById('selected-name').textContent = names;
     document.getElementById('analyze-btn').disabled = false;
+    document.getElementById('clear-btn').style.display = 'inline-block';
+    hideError();
+  }
+  function clearFiles() {
+    selectedFiles = [];
+    document.getElementById('selected-name').textContent = '';
+    document.getElementById('analyze-btn').disabled = true;
+    document.getElementById('clear-btn').style.display = 'none';
+    document.getElementById('file-input').value = '';
     hideError();
   }
 
@@ -1290,12 +1373,94 @@
     document.getElementById('fipe-error').style.display = 'none';
   }
 
+  // ── PDF Splitter ───────────────────────────────────────────
+  let splitSelectedFile = null;
+
+  function splitFileSelected(input) {
+    const file = Array.from(input.files).find(f => f.type === 'application/pdf');
+    if (file) setSplitFile(file);
+    else showSplitError('Por favor, envie apenas um arquivo PDF.');
+  }
+  function splitHandleDragOver(e) {
+    e.preventDefault();
+    document.getElementById('split-drop-area').classList.add('drag-over');
+  }
+  function splitHandleDragLeave() {
+    document.getElementById('split-drop-area').classList.remove('drag-over');
+  }
+  function splitHandleDrop(e) {
+    e.preventDefault();
+    document.getElementById('split-drop-area').classList.remove('drag-over');
+    const file = Array.from(e.dataTransfer.files).find(f => f.type === 'application/pdf');
+    if (file) setSplitFile(file);
+    else showSplitError('Por favor, envie apenas um arquivo PDF.');
+  }
+  function setSplitFile(file) {
+    splitSelectedFile = file;
+    const size = file.size >= 1024 * 1024
+      ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+      : (file.size / 1024).toFixed(0) + ' KB';
+    document.getElementById('split-selected-name').textContent = '📄 ' + file.name + ' — ' + size;
+    document.getElementById('split-btn').disabled = false;
+    document.getElementById('split-clear-btn').style.display = 'inline-block';
+    hideSplitError();
+  }
+  function clearSplitFile() {
+    splitSelectedFile = null;
+    document.getElementById('split-selected-name').textContent = '';
+    document.getElementById('split-btn').disabled = true;
+    document.getElementById('split-clear-btn').style.display = 'none';
+    document.getElementById('split-file-input').value = '';
+    hideSplitError();
+  }
+  async function splitPdf() {
+    if (!splitSelectedFile) return;
+    setSplitLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('pdf', splitSelectedFile);
+      const res = await fetch('/api/split-pdf', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const data = await res.json();
+        showSplitError(data.error || 'Erro ao fragmentar o PDF.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = splitSelectedFile.name.replace(/\.pdf$/i, '') + '_paginas.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      showSplitError('Erro de conexão. Tente novamente.');
+    } finally {
+      setSplitLoading(false);
+    }
+  }
+  function setSplitLoading(on) {
+    document.getElementById('split-loading').style.display = on ? 'block' : 'none';
+    document.getElementById('split-btn').disabled = on;
+    document.getElementById('split-drop-area').style.pointerEvents = on ? 'none' : '';
+  }
+  function showSplitError(msg) {
+    const el = document.getElementById('split-error');
+    el.textContent = '⚠ ' + msg;
+    el.style.display = 'block';
+  }
+  function hideSplitError() {
+    document.getElementById('split-error').style.display = 'none';
+  }
+
   function resetUI() {
     selectedFiles = [];
     document.getElementById('results').style.display        = 'none';
     document.getElementById('upload-section').style.display = 'block';
     document.getElementById('selected-name').textContent    = '';
     document.getElementById('analyze-btn').disabled         = true;
+    document.getElementById('clear-btn').style.display      = 'none';
     document.getElementById('file-input').value             = '';
     hideError();
   }

@@ -10,6 +10,8 @@ const OpenAI = require('openai');
 const path = require('path');
 const { createCanvas } = require('canvas');
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+const { PDFDocument } = require('pdf-lib');
+const archiver = require('archiver');
 
 const DATA_DIR    = path.join(__dirname, 'data');
 const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
@@ -547,6 +549,64 @@ app.post('/api/fipe', fipeLimiter, async (req, res) => {
   } catch (err) {
     console.error('[FIPE]', err.message);
     res.status(500).json({ error: 'Erro ao consultar FIPE. Tente novamente.' });
+  }
+});
+
+// ── Fragmentador de PDF ────────────────────────────────────────
+const splitUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Apenas arquivos PDF são aceitos'));
+  }
+});
+
+const splitLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições de fragmentação. Aguarde 1 minuto.' }
+});
+
+app.post('/api/split-pdf', splitLimiter, splitUpload.single('pdf'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum PDF enviado.' });
+
+  const MAX_PAGES = 50;
+
+  try {
+    const pdfDoc = await PDFDocument.load(req.file.buffer);
+    const totalPages = pdfDoc.getPageCount();
+
+    if (totalPages > MAX_PAGES) {
+      return res.status(400).json({ error: `PDF tem ${totalPages} páginas. O limite é ${MAX_PAGES}.` });
+    }
+
+    const baseName = req.file.originalname.replace(/\.pdf$/i, '').replace(/[^\w\-]/g, '_');
+    const pad = String(totalPages).length;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}_paginas.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.pipe(res);
+
+    for (let i = 0; i < totalPages; i++) {
+      const singleDoc = await PDFDocument.create();
+      const [page] = await singleDoc.copyPages(pdfDoc, [i]);
+      singleDoc.addPage(page);
+      const bytes = await singleDoc.save();
+      const pageNum = String(i + 1).padStart(pad, '0');
+      archive.append(Buffer.from(bytes), { name: `pagina_${pageNum}.pdf` });
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('[SPLIT-PDF]', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Erro ao fragmentar o PDF. Verifique se o arquivo é válido.' });
+    }
   }
 });
 

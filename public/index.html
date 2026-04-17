@@ -145,23 +145,48 @@
       color: var(--green-dark);
     }
 
-    /* ── Loading ─────────────────────────────── */
+    /* ── Progress bar loading ────────────────── */
     #loading {
       display: none;
-      text-align: center;
       padding: 3.5rem 1rem;
     }
-    .spinner {
-      width: 52px; height: 52px;
-      border: 5px solid #ddd;
-      border-top-color: var(--green-mid);
-      border-radius: 50%;
-      animation: spin .75s linear infinite;
-      margin: 0 auto 1.25rem;
+    .progress-wrap { text-align: center; }
+    .progress-label {
+      color: var(--green-dark);
+      font-weight: 600;
+      font-size: .95rem;
+      margin-bottom: .9rem;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loading p { color: var(--green-dark); font-weight: 600; }
-    #loading small { color: #888; font-size: .8rem; }
+    .progress-track {
+      width: 100%;
+      max-width: 380px;
+      margin: 0 auto;
+      background: #e0e0e0;
+      border-radius: 99px;
+      height: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--green-dark), var(--green-light));
+      transition: width 0.4s ease;
+    }
+    .progress-pct {
+      display: block;
+      margin-top: .55rem;
+      font-size: .82rem;
+      font-weight: 700;
+      color: var(--green-dark);
+    }
+    .progress-detail {
+      display: block;
+      margin-top: .3rem;
+      font-size: .78rem;
+      color: #888;
+    }
+    #split-loading { display: none; padding: 2rem 0; }
 
     /* ── Error banner ────────────────────────── */
     .error-banner {
@@ -388,10 +413,107 @@
     }
     #fipe-chart-wrap canvas { max-height: 220px; }
 
+    /* ── Left nav sidebar ───────────────────── */
+    #left-sidebar {
+      display: none;
+      flex-direction: column;
+      width: 200px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 1rem;
+      gap: .35rem;
+      align-self: flex-start;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      padding: .8rem 1rem;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: #555;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      text-align: left;
+      width: 100%;
+    }
+    .nav-item:hover  { background: var(--green-pale); color: var(--green-dark); }
+    .nav-item.active { background: var(--green-dark); color: var(--white); }
+    .nav-icon { font-size: 1.05rem; flex-shrink: 0; }
+
+    /* ── API status bar ──────────────────────── */
+    .api-status-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: .85rem;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: .6rem .85rem;
+      background: var(--gray-bg);
+      border-radius: 8px;
+      border: 1px solid var(--gray-border);
+    }
+    .api-status-item {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      font-size: .75rem;
+      color: #666;
+    }
+    .api-dots { display: flex; gap: 3px; }
+    .api-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ddd;
+      title: '';
+    }
+    .api-dot.ok  { background: #4caf50; }
+    .api-dot.err { background: #f44336; }
+    .api-uptime { font-weight: 700; }
+    .api-uptime.good { color: #2e7d32; }
+    .api-uptime.warn { color: #f57c00; }
+    .api-uptime.bad  { color: #c62828; }
+
+    /* ── Source badge ────────────────────────── */
+    .fipe-fonte-badge {
+      display: none;
+      align-items: center;
+      gap: .4rem;
+      border-radius: 6px;
+      padding: .35rem .8rem;
+      font-size: .78rem;
+      font-weight: 600;
+      margin-bottom: .75rem;
+    }
+    .fipe-fonte-badge.visible { display: inline-flex; }
+    .fipe-fonte-badge.suhai     { background: #e8f5e9; border: 1px solid #a5d6a7; color: #1b5e20; }
+    .fipe-fonte-badge.apibrasil { background: #e8f4ff; border: 1px solid #90caf9; color: #1565c0; }
+    .fipe-fonte-badge.cache     { background: #f3e5f5; border: 1px solid #ce93d8; color: #6a1b9a; }
+
     @media (max-width: 768px) {
       .layout { flex-direction: column; }
       .history-panel { width: 100%; position: static; }
       .history-list  { max-height: 240px; }
+      #left-sidebar {
+        flex-direction: row;
+        width: 100%;
+        position: static;
+        overflow-x: auto;
+        gap: .25rem;
+      }
+      .nav-item {
+        flex: 1;
+        min-width: 80px;
+        padding: .65rem .5rem;
+        justify-content: center;
+        flex-direction: column;
+        text-align: center;
+        gap: .2rem;
+        font-size: .75rem;
+      }
     }
   </style>
 </head>
@@ -432,6 +554,19 @@
 
 <!-- ── Main ─────────────────────────────────────── -->
 <div class="layout">
+
+<!-- ── Left sidebar ─────────────────────────────── -->
+<nav id="left-sidebar">
+  <button class="nav-item active" data-section="upload" onclick="switchSection('upload')">
+    <span class="nav-icon">📄</span> Simples Nacional
+  </button>
+  <button class="nav-item" data-section="fipe" onclick="switchSection('fipe')">
+    <span class="nav-icon">🚗</span> Consulta FIPE
+  </button>
+  <button class="nav-item" data-section="split" onclick="switchSection('split')">
+    <span class="nav-icon">✂️</span> Fragmentar PDF
+  </button>
+</nav>
 
 <!-- ── Content ──────────────────────────────────── -->
 <div class="content-area">
@@ -490,6 +625,20 @@
       <span id="fipe-saldo-badge" style="font-size:.78rem;font-weight:600;color:var(--green-mid);opacity:.85"></span>
     </div>
 
+    <!-- API status bar -->
+    <div id="api-status-bar" class="api-status-bar" style="display:none">
+      <div class="api-status-item">
+        <span>Suhai:</span>
+        <div class="api-dots" id="suhai-dots"></div>
+        <span class="api-uptime" id="suhai-uptime"></span>
+      </div>
+      <div class="api-status-item">
+        <span>APIBrasil:</span>
+        <div class="api-dots" id="apibrasil-dots"></div>
+        <span class="api-uptime" id="apibrasil-uptime"></span>
+      </div>
+    </div>
+
     <div class="fipe-plate-row">
       <input id="fipe-plate-input" type="text" maxlength="8"
              placeholder="ABC1234 ou ABC1D23" autocomplete="off"
@@ -501,8 +650,9 @@
     <div id="fipe-confirm" style="display:none;background:#f0f7f0;border:1px solid var(--green-light);border-radius:10px;padding:.9rem 1.1rem;margin-bottom:.75rem">
       <div style="font-size:.88rem;color:#333;margin-bottom:.7rem">
         Placa: <strong id="fipe-confirm-placa"></strong> &nbsp;·&nbsp;
-        Custo estimado: <strong style="color:var(--green-dark)">R$&nbsp;0,06</strong> &nbsp;·&nbsp;
-        Saldo atual: <strong id="fipe-confirm-saldo" style="color:var(--green-dark)"></strong>
+        Tentará via <strong style="color:var(--green-dark)">Suhai</strong> primeiro (sem custo),
+        depois <strong style="color:#1565c0">APIBrasil</strong>
+        (saldo: <strong id="fipe-confirm-saldo" style="color:var(--green-dark)"></strong>)
       </div>
       <div style="display:flex;gap:.6rem">
         <button class="btn btn-sm" style="background:var(--green-dark)" onclick="confirmFipe()">Confirmar consulta</button>
@@ -512,12 +662,29 @@
 
     <div id="fipe-error" class="error-banner"></div>
 
-    <div id="fipe-loading" style="display:none;text-align:center;padding:2rem 0">
-      <div class="spinner"></div>
-      <p style="color:var(--green-dark);font-weight:600">Consultando FIPE…</p>
+    <div id="fipe-loading" style="display:none;padding:1.5rem 0">
+      <div class="progress-wrap">
+        <p class="progress-label" id="fipe-loading-msg">Consultando FIPE…</p>
+        <div class="progress-track"><div class="progress-bar" id="fipe-progress-bar"></div></div>
+        <span class="progress-pct" id="fipe-progress-pct">0%</span>
+        <span class="progress-detail" id="fipe-loading-detail"></span>
+      </div>
+    </div>
+
+    <!-- Pergunta ao usuário se quer usar APIBrasil após falha da Suhai -->
+    <div id="fipe-fallback-confirm" style="display:none;background:#fff3e0;border:1px solid #ffcc80;border-radius:10px;padding:.9rem 1.1rem;margin-bottom:.75rem">
+      <div style="font-size:.88rem;color:#333;margin-bottom:.7rem">
+        ⚠️ <strong>Suhai indisponível.</strong> Deseja tentar via <strong style="color:#1565c0">APIBrasil</strong>?
+        <span style="font-size:.8rem;color:#888;display:block;margin-top:.2rem">Pode consumir crédito da conta APIBrasil.</span>
+      </div>
+      <div style="display:flex;gap:.6rem">
+        <button class="btn btn-sm" style="background:#1565c0" onclick="confirmApiBrasil()">Sim, consultar via APIBrasil</button>
+        <button class="btn btn-sm" style="background:#888" onclick="cancelApiBrasil()">Não, cancelar</button>
+      </div>
     </div>
 
     <div id="fipe-results" style="display:none">
+      <div id="fipe-fonte-badge" class="fipe-fonte-badge"></div>
       <div class="fipe-value-box">
         <div>
           <div style="font-size:.8rem;opacity:.8;margin-bottom:.3rem">Valor FIPE</div>
@@ -578,16 +745,22 @@
     <div id="split-error" class="error-banner"></div>
 
     <div id="split-loading">
-      <div class="spinner"></div>
-      <p style="color:var(--green-dark);font-weight:600">Fragmentando PDF…</p>
+      <div class="progress-wrap">
+        <p class="progress-label">Fragmentando PDF…</p>
+        <div class="progress-track"><div class="progress-bar" id="split-progress-bar"></div></div>
+        <span class="progress-pct" id="split-progress-pct">0%</span>
+      </div>
     </div>
   </div>
 
   <!-- Loading -->
   <div id="loading">
-    <div class="spinner"></div>
-    <p>Analisando extrato com IA…</p>
-    <small>Isso pode levar alguns segundos</small>
+    <div class="progress-wrap">
+      <p class="progress-label" id="main-loading-msg">Analisando extrato com IA…</p>
+      <div class="progress-track"><div class="progress-bar" id="main-progress-bar"></div></div>
+      <span class="progress-pct" id="main-progress-pct">0%</span>
+      <span class="progress-detail">Isso pode levar alguns segundos</span>
+    </div>
   </div>
 
   <!-- Results -->
@@ -777,9 +950,10 @@
         errEl.textContent = '';
         input.style.borderColor = '';
         document.getElementById('modal-overlay').style.display = 'none';
-        document.getElementById('fipe-section').style.display = 'block';
-        document.getElementById('split-section').style.display = 'block';
+        document.getElementById('left-sidebar').style.display = 'flex';
+        switchSection('upload');
         loadFipeSaldo();
+        loadFipeStatus();
         fetchHistory();
       } else {
         errEl.textContent = 'Senha incorreta. Tente novamente.';
@@ -839,9 +1013,9 @@
   async function analyzeFile() {
     if (!selectedFiles.length) return;
     setLoading(true);
-    const loadingMsg = document.querySelector('#loading p');
-    if (selectedFiles.length === 2) loadingMsg.textContent = 'Analisando 2 extratos com IA…';
-    else loadingMsg.textContent = 'Analisando extrato com IA…';
+    const loadingMsg = document.getElementById('main-loading-msg');
+    if (loadingMsg) loadingMsg.textContent = selectedFiles.length === 2 ? 'Analisando 2 extratos com IA…' : 'Analisando extrato com IA…';
+    startProgress('main-progress-bar', 'main-progress-pct', 15000);
 
     async function analyzeSingle(file) {
       const formData = new FormData();
@@ -899,7 +1073,8 @@
 
       renderResults(data);
       fetchHistory();
-      setLoading(false);
+      await finishProgress('main-progress-bar', 'main-progress-pct');
+      document.getElementById('loading').style.display = 'none';
       document.getElementById('results').style.display = 'block';
       document.getElementById('upload-section').style.display = 'none';
 
@@ -1095,12 +1270,108 @@
     });
   }
 
+  // ── Progress bar helpers ──────────────────────────────────
+  const _progressTimers = {};
+
+  function startProgress(barId, pctId, durationMs) {
+    const bar = document.getElementById(barId);
+    const pct = document.getElementById(pctId);
+    if (!bar) return;
+
+    // Reseta sem animação
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    bar.offsetWidth; // force reflow
+
+    // Anima até 85% durante durationMs
+    bar.style.transition = `width ${durationMs}ms ease-out`;
+    bar.style.width = '85%';
+
+    // Atualiza o texto de % com setInterval
+    if (pct) {
+      clearInterval(_progressTimers[barId]);
+      let p = 0;
+      const target = 85;
+      const tick = 80; // ms
+      const steps = durationMs / tick;
+      _progressTimers[barId] = setInterval(() => {
+        p = Math.min(target, p + (target - p) * (tick / durationMs) * 3);
+        pct.textContent = Math.round(p) + '%';
+        if (Math.round(p) >= target) clearInterval(_progressTimers[barId]);
+      }, tick);
+    }
+  }
+
+  function finishProgress(barId, pctId) {
+    return new Promise(resolve => {
+      clearInterval(_progressTimers[barId]);
+      const bar = document.getElementById(barId);
+      const pct = document.getElementById(pctId);
+      if (bar) { bar.style.transition = 'width 350ms ease-in-out'; bar.style.width = '100%'; }
+      if (pct) pct.textContent = '100%';
+      setTimeout(resolve, 400);
+    });
+  }
+
+  function resetProgress(barId, pctId) {
+    clearInterval(_progressTimers[barId]);
+    const bar = document.getElementById(barId);
+    const pct = document.getElementById(pctId);
+    if (bar) { bar.style.transition = 'none'; bar.style.width = '0%'; }
+    if (pct) pct.textContent = '0%';
+  }
+
+  function switchSection(name) {
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.section === name);
+    });
+    document.getElementById('upload-section').style.display = name === 'upload' ? 'block' : 'none';
+    document.getElementById('fipe-section').style.display   = name === 'fipe'   ? 'block' : 'none';
+    document.getElementById('split-section').style.display  = name === 'split'  ? 'block' : 'none';
+    document.getElementById('loading').style.display  = 'none';
+    document.getElementById('results').style.display   = 'none';
+  }
+
+  async function loadFipeStatus() {
+    try {
+      const res = await fetch('/api/fipe/status', { headers: { 'X-Password': accessPassword } });
+      if (!res.ok) return;
+      const status = await res.json();
+      renderApiStatus(status);
+    } catch { /* silencioso */ }
+  }
+
+  function renderApiStatus(status) {
+    renderApiDots('suhai-dots', 'suhai-uptime', status.suhai || []);
+    renderApiDots('apibrasil-dots', 'apibrasil-uptime', status.apibrasil || []);
+    const bar = document.getElementById('api-status-bar');
+    if (bar && ((status.suhai || []).length > 0 || (status.apibrasil || []).length > 0)) {
+      bar.style.display = 'flex';
+    }
+  }
+
+  function renderApiDots(dotsId, uptimeId, entries) {
+    const dotsEl   = document.getElementById(dotsId);
+    const uptimeEl = document.getElementById(uptimeId);
+    if (!dotsEl || !uptimeEl) return;
+    const last10 = entries.slice(-10);
+    dotsEl.innerHTML = last10.map(e =>
+      `<div class="api-dot ${e.success ? 'ok' : 'err'}"></div>`
+    ).join('');
+    if (entries.length > 0) {
+      const pct = Math.round((entries.filter(e => e.success).length / entries.length) * 100);
+      uptimeEl.className = 'api-uptime ' + (pct >= 80 ? 'good' : pct >= 50 ? 'warn' : 'bad');
+      uptimeEl.textContent = pct + '%';
+    }
+  }
+
   function setLoading(on) {
     document.getElementById('loading').style.display = on ? 'block' : 'none';
     if (on) {
       document.getElementById('upload-section').style.display = 'none';
       document.getElementById('results').style.display = 'none';
     } else {
+      resetProgress('main-progress-bar', 'main-progress-pct');
       document.getElementById('upload-section').style.display = 'block';
     }
   }
@@ -1154,8 +1425,8 @@
   function loadFromHistory(id) {
     const entry = historyMap[id];
     if (!entry || !entry.data) return;
+    switchSection('upload');
     renderResults(entry.data);
-    document.getElementById('loading').style.display        = 'none';
     document.getElementById('upload-section').style.display = 'none';
     document.getElementById('results').style.display        = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1195,6 +1466,23 @@
     });
   }
 
+  // ── FIPE cache (localStorage, até 100 placas) ─────────────
+  function getFipeCache() {
+    try { return JSON.parse(localStorage.getItem('fipe_cache_v1') || '[]'); } catch { return []; }
+  }
+  function saveFipeCache(cache) {
+    try { localStorage.setItem('fipe_cache_v1', JSON.stringify(cache)); } catch {}
+  }
+  function cacheLookup(placa) {
+    return getFipeCache().find(e => e.placa === placa) || null;
+  }
+  function cacheStore(placa, data) {
+    let cache = getFipeCache().filter(e => e.placa !== placa);
+    cache.unshift({ placa, ts: Date.now(), data });
+    if (cache.length > 100) cache = cache.slice(0, 100);
+    saveFipeCache(cache);
+  }
+
   // ── FIPE ──────────────────────────────────────────────────
   async function loadFipeSaldo() {
     try {
@@ -1224,6 +1512,15 @@
     document.getElementById('fipe-results').style.display = 'none';
     document.getElementById('fipe-btn').disabled = true;
 
+    // Verifica cache local primeiro
+    const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const cached = cacheLookup(cleanPlaca);
+    if (cached) {
+      renderFipe(cached.data, true);
+      document.getElementById('fipe-btn').disabled = false;
+      return;
+    }
+
     // Sempre busca saldo fresco antes de mostrar confirmação
     let saldoTexto = '—';
     try {
@@ -1245,14 +1542,61 @@
   }
 
   function cancelFipe() {
-    document.getElementById('fipe-confirm').style.display = 'none';
+    document.getElementById('fipe-confirm').style.display          = 'none';
+    document.getElementById('fipe-fallback-confirm').style.display = 'none';
     document.getElementById('fipe-btn').disabled = false;
+  }
+
+  function setFipeLoadingMsg(msg, detail) {
+    const msgEl    = document.getElementById('fipe-loading-msg');
+    const detailEl = document.getElementById('fipe-loading-detail');
+    if (msgEl)    msgEl.textContent    = msg;
+    if (detailEl) detailEl.textContent = detail || '';
   }
 
   async function confirmFipe() {
     const placa = document.getElementById('fipe-plate-input').value.trim();
-    document.getElementById('fipe-confirm').style.display = 'none';
-    document.getElementById('fipe-loading').style.display = 'block';
+    const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    document.getElementById('fipe-confirm').style.display          = 'none';
+    document.getElementById('fipe-fallback-confirm').style.display = 'none';
+    document.getElementById('fipe-loading').style.display          = 'block';
+    document.getElementById('fipe-results').style.display          = 'none';
+    hideFipeError();
+
+    setFipeLoadingMsg('Consultando via Suhai Seguradora…', 'Buscando valor FIPE na Suhai');
+    startProgress('fipe-progress-bar', 'fipe-progress-pct', 20000);
+    try {
+      const res = await fetch('/api/fipe/suhai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: accessPassword, placa })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await finishProgress('fipe-progress-bar', 'fipe-progress-pct');
+        document.getElementById('fipe-loading').style.display = 'none';
+        document.getElementById('fipe-btn').disabled = false;
+        loadFipeStatus();
+        cacheStore(cleanPlaca, data);
+        renderFipe(data);
+        return;
+      }
+    } catch { /* Suhai falhou */ }
+
+    // Suhai falhou — pergunta se quer APIBrasil
+    resetProgress('fipe-progress-bar', 'fipe-progress-pct');
+    document.getElementById('fipe-loading').style.display          = 'none';
+    document.getElementById('fipe-fallback-confirm').style.display = 'block';
+    loadFipeStatus();
+  }
+
+  async function confirmApiBrasil() {
+    const placa = document.getElementById('fipe-plate-input').value.trim();
+    const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    document.getElementById('fipe-fallback-confirm').style.display = 'none';
+    document.getElementById('fipe-loading').style.display          = 'block';
+    setFipeLoadingMsg('Consultando via APIBrasil…', 'Usando crédito da conta APIBrasil');
+    startProgress('fipe-progress-bar', 'fipe-progress-pct', 8000);
 
     try {
       const res = await fetch('/api/fipe', {
@@ -1260,19 +1604,74 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: accessPassword, placa })
       });
-      const data = await res.json();
-      if (!res.ok) { showFipeError(data.error || 'Erro na consulta.'); return; }
-      if (data.balance) updateSaldoBadge(data.balance);
-      renderFipe(data);
+      const json = await res.json();
+      if (!res.ok) { showFipeError(json.error || 'Erro na consulta via APIBrasil.'); return; }
+      await finishProgress('fipe-progress-bar', 'fipe-progress-pct');
+      if (json.balance) updateSaldoBadge(json.balance);
+      loadFipeStatus();
+      cacheStore(cleanPlaca, json);
+      renderFipe(json);
     } catch {
       showFipeError('Falha de conexão. Verifique sua internet.');
     } finally {
+      resetProgress('fipe-progress-bar', 'fipe-progress-pct');
       document.getElementById('fipe-loading').style.display = 'none';
       document.getElementById('fipe-btn').disabled = false;
     }
   }
 
-  function renderFipe(data) {
+  function cancelApiBrasil() {
+    document.getElementById('fipe-fallback-confirm').style.display = 'none';
+    document.getElementById('fipe-btn').disabled = false;
+  }
+
+  function showFonteBadge(fonte) {
+    const badge = document.getElementById('fipe-fonte-badge');
+    if (!badge) return;
+    badge.className = 'fipe-fonte-badge visible ' + fonte;
+    const labels = {
+      suhai:     '🛡️ Resultado via Suhai Seguradora',
+      apibrasil: '📡 Resultado via APIBrasil',
+      cache:     '⚡ Resultado em cache local',
+    };
+    badge.textContent = labels[fonte] || fonte;
+  }
+
+  function renderFipe(data, fromCache = false) {
+    // Resposta da Suhai ou cache de resultado Suhai
+    if (data.fonte === 'suhai') {
+      document.getElementById('fipe-price').textContent =
+        data.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      document.getElementById('fipe-cod').textContent =
+        data.codigoFipe || '—';
+      document.getElementById('fipe-modelo').textContent =
+        [data.marca, data.modelo].filter(Boolean).join(' ') || 'Suhai Seguradora';
+      document.getElementById('fipe-ref-mes').textContent = '';
+
+      const grid = document.getElementById('fipe-grid');
+      grid.innerHTML = '';
+      [
+        ['Cód. FIPE',      data.codigoFipe],
+        ['Marca',          data.marca],
+        ['Modelo',         data.modelo],
+        ['Ano Fabricação', data.anoFabricacao],
+        ['Ano Modelo',     data.anoModelo],
+      ].filter(([, v]) => v).forEach(([label, value]) => {
+        grid.insertAdjacentHTML('beforeend',
+          `<div class="fipe-grid-item">
+             <div class="fg-label">${label}</div>
+             <div class="fg-value">${value}</div>
+           </div>`);
+      });
+
+      if (fipeChart) { fipeChart.destroy(); fipeChart = null; }
+      showFonteBadge(fromCache ? 'cache' : 'suhai');
+      document.getElementById('fipe-results').style.display = 'block';
+      return;
+    }
+
+    showFonteBadge(fromCache ? 'cache' : 'apibrasil');
+
     const entries = data?.data?.data || [];
     const veiculo = data?.data?.veiculo || {};
     const principal = entries.find(e => e.principal) || entries[0];
@@ -1426,6 +1825,7 @@
         return;
       }
       const blob = await res.blob();
+      await finishProgress('split-progress-bar', 'split-progress-pct');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1444,6 +1844,8 @@
     document.getElementById('split-loading').style.display = on ? 'block' : 'none';
     document.getElementById('split-btn').disabled = on;
     document.getElementById('split-drop-area').style.pointerEvents = on ? 'none' : '';
+    if (on) startProgress('split-progress-bar', 'split-progress-pct', 12000);
+    else    resetProgress('split-progress-bar', 'split-progress-pct');
   }
   function showSplitError(msg) {
     const el = document.getElementById('split-error');
@@ -1456,13 +1858,12 @@
 
   function resetUI() {
     selectedFiles = [];
-    document.getElementById('results').style.display        = 'none';
-    document.getElementById('upload-section').style.display = 'block';
-    document.getElementById('selected-name').textContent    = '';
-    document.getElementById('analyze-btn').disabled         = true;
-    document.getElementById('clear-btn').style.display      = 'none';
-    document.getElementById('file-input').value             = '';
+    document.getElementById('selected-name').textContent = '';
+    document.getElementById('analyze-btn').disabled      = true;
+    document.getElementById('clear-btn').style.display   = 'none';
+    document.getElementById('file-input').value          = '';
     hideError();
+    switchSection('upload');
   }
 </script>
 </body>

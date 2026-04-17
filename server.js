@@ -12,10 +12,116 @@ const { createCanvas } = require('canvas');
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 const { PDFDocument } = require('pdf-lib');
 const archiver = require('archiver');
+const puppeteer = require('puppeteer');
 
-const DATA_DIR    = path.join(__dirname, 'data');
-const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
+const DATA_DIR      = path.join(__dirname, 'data');
+const HISTORY_FILE  = path.join(DATA_DIR, 'history.json');
+const API_STATUS_FILE = path.join(DATA_DIR, 'api-status.json');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+
+function registrarStatusAPI(fonte, success, ms) {
+  try {
+    let status = fs.existsSync(API_STATUS_FILE)
+      ? JSON.parse(fs.readFileSync(API_STATUS_FILE, 'utf8'))
+      : { suhai: [], apibrasil: [] };
+    if (!status.suhai)     status.suhai = [];
+    if (!status.apibrasil) status.apibrasil = [];
+    status[fonte].push({ ts: new Date().toISOString(), success, ms });
+    if (status[fonte].length > 100) status[fonte] = status[fonte].slice(-100);
+    fs.writeFileSync(API_STATUS_FILE, JSON.stringify(status, null, 2));
+  } catch (e) {
+    console.error('Erro ao registrar status API:', e.message);
+  }
+}
+
+async function scrapeSuhai(placa) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+  });
+  const page = await browser.newPage();
+  page.setDefaultTimeout(30000);
+
+  try {
+    await page.goto('https://suhaiseguradoracotacao.com.br/login', { waitUntil: 'networkidle2' });
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Preenche CPF — tenta múltiplos seletores comuns
+    const cpfSelectors = ['input[ng-model*="Cpf"]', 'input[ng-model*="cpf"]', 'input[name="cpf"]', 'input[type="text"]'];
+    let cpfFilled = false;
+    for (const sel of cpfSelectors) {
+      const el = await page.$(sel);
+      if (el) { await el.click({ clickCount: 3 }); await el.type(process.env.SUHAI_LOGIN, { delay: 50 }); cpfFilled = true; break; }
+    }
+    if (!cpfFilled) throw new Error('Campo de CPF não encontrado na página de login da Suhai');
+
+    const pwEl = await page.$('input[type="password"]');
+    if (!pwEl) throw new Error('Campo de senha não encontrado na página de login da Suhai');
+    await pwEl.type(process.env.SUHAI_PASSWORD, { delay: 50 });
+
+    // Submete login
+    const submitSelectors = ['button[type="submit"]', 'input[type="submit"]', 'button.btn-primary', 'button.btn-default'];
+    let submitted = false;
+    for (const sel of submitSelectors) {
+      const btn = await page.$(sel);
+      if (btn) { await btn.click(); submitted = true; break; }
+    }
+    if (!submitted) await page.keyboard.press('Enter');
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Aguarda botão "Incluir" aparecer (pós-login)
+    await page.waitForSelector('button[ui-sref*="new"]', { timeout: 10000 });
+    await page.click('button[ui-sref*="new"]');
+
+    // Aguarda campo de placa
+    await page.waitForSelector('input[ng-model="calculo.ds_Placa"]', { timeout: 10000 });
+    const plateEl = await page.$('input[ng-model="calculo.ds_Placa"]');
+    await plateEl.click({ clickCount: 3 });
+    await plateEl.type(placa, { delay: 100 });
+    await page.keyboard.press('Tab');
+
+    // Aguarda campo de valor FIPE ser preenchido
+    await page.waitForFunction(
+      () => {
+        const el = document.querySelector('input[ng-model="calculo.itens[calculo.nr_Item - 1].vl_ValorIS"]');
+        return el && el.value && el.value.trim() !== '' && el.value !== '0' && el.value !== '0,00';
+      },
+      { timeout: 15000 }
+    );
+
+    // Extrai todos os campos disponíveis
+    const getVal = (sel) => page.$eval(sel, el => el.value).catch(() => '');
+    const getLbl = (sel) => page.$eval(sel, el => el.options[el.selectedIndex]?.label || '').catch(() => '');
+
+    const [valor, codigoFipe, marca, modelo, anoFabStr, anoModStr] = await Promise.all([
+      getVal('input[ng-model="calculo.itens[calculo.nr_Item - 1].vl_ValorIS"]'),
+      getVal('input[ng-model="calculo.itens[calculo.nr_Item - 1].veiculo.cd_Fipe"]'),
+      getVal('input[ng-model="calculo.itens[calculo.nr_Item - 1].marcaVeiculo.ds_Descricao"]'),
+      getVal('input[ng-model="calculo.itens[calculo.nr_Item - 1].veiculo.ds_Descricao"]'),
+      getLbl('select[ng-model="calculo.itens[calculo.nr_Item - 1].nr_AnoFabricacao"]'),
+      getLbl('select[ng-model="calculo.itens[calculo.nr_Item - 1].nr_AnoModelo"]'),
+    ]);
+
+    if (!valor || valor.trim() === '') throw new Error('Valor FIPE não retornado pela Suhai');
+
+    const valorNumerico = parseFloat(valor.replace(/\./g, '').replace(',', '.'));
+    if (isNaN(valorNumerico) || valorNumerico <= 0) throw new Error('Valor FIPE inválido: ' + valor);
+
+    console.log(`[SUHAI] Placa ${placa}: R$ ${valorNumerico} | ${marca} ${modelo} ${anoFabStr}/${anoModStr}`);
+    return {
+      valor: valorNumerico,
+      codigoFipe: codigoFipe || null,
+      marca: marca || null,
+      modelo: modelo || null,
+      anoFabricacao: anoFabStr ? parseInt(anoFabStr) || null : null,
+      anoModelo: anoModStr ? parseInt(anoModStr) || null : null,
+      fonte: 'suhai'
+    };
+
+  } finally {
+    await browser.close();
+  }
+}
 
 function saveToHistory(entry) {
   try {
@@ -513,6 +619,52 @@ const fipeLimiter = rateLimit({
   message: { error: 'Muitas consultas. Aguarde 1 minuto.' }
 });
 
+app.get('/api/fipe/status', (req, res) => {
+  const password = req.headers['x-password'];
+  if (!password || password !== process.env.ACCESS_PASSWORD) {
+    return res.status(401).json({ error: 'Senha incorreta' });
+  }
+  try {
+    const status = fs.existsSync(API_STATUS_FILE)
+      ? JSON.parse(fs.readFileSync(API_STATUS_FILE, 'utf8'))
+      : { suhai: [], apibrasil: [] };
+    res.json(status);
+  } catch {
+    res.json({ suhai: [], apibrasil: [] });
+  }
+});
+
+app.post('/api/fipe/suhai', fipeLimiter, async (req, res) => {
+  const { password, placa } = req.body;
+
+  if (!password || password !== process.env.ACCESS_PASSWORD) {
+    return res.status(401).json({ error: 'Senha incorreta' });
+  }
+  if (!placa || typeof placa !== 'string') {
+    return res.status(400).json({ error: 'Informe a placa do veículo.' });
+  }
+
+  const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (cleanPlaca.length < 6 || cleanPlaca.length > 8) {
+    return res.status(400).json({ error: 'Placa inválida. Use o formato ABC1234 ou ABC1D23.' });
+  }
+
+  if (!process.env.SUHAI_LOGIN || !process.env.SUHAI_PASSWORD) {
+    return res.status(503).json({ error: 'Suhai não configurada.' });
+  }
+
+  const t0 = Date.now();
+  try {
+    const result = await scrapeSuhai(cleanPlaca);
+    registrarStatusAPI('suhai', true, Date.now() - t0);
+    res.json(result);
+  } catch (err) {
+    console.error('[FIPE/SUHAI]', err.message);
+    registrarStatusAPI('suhai', false, Date.now() - t0);
+    res.status(502).json({ error: 'Suhai indisponível: ' + err.message });
+  }
+});
+
 app.post('/api/fipe', fipeLimiter, async (req, res) => {
   const { password, placa } = req.body;
 
@@ -529,6 +681,7 @@ app.post('/api/fipe', fipeLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Placa inválida. Use o formato ABC1234 ou ABC1D23.' });
   }
 
+  const t0 = Date.now();
   try {
     const apiRes = await fetch('https://gateway.apibrasil.io/api/v2/consulta/veiculos/credits', {
       method: 'POST',
@@ -542,12 +695,15 @@ app.post('/api/fipe', fipeLimiter, async (req, res) => {
     const apiData = await apiRes.json();
 
     if (apiData.error) {
+      registrarStatusAPI('apibrasil', false, Date.now() - t0);
       return res.status(502).json({ error: apiData.message || 'Erro na consulta FIPE.' });
     }
 
-    res.json(apiData);
+    registrarStatusAPI('apibrasil', true, Date.now() - t0);
+    res.json({ ...apiData, fonte: 'apibrasil' });
   } catch (err) {
     console.error('[FIPE]', err.message);
+    registrarStatusAPI('apibrasil', false, Date.now() - t0);
     res.status(500).json({ error: 'Erro ao consultar FIPE. Tente novamente.' });
   }
 });
